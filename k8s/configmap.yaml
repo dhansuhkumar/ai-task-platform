@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: ai-task-platform
+data:
+  MONGODB_URI: "mongodb://mongo:27017/ai-task-platform"
+  REDIS_URI: "redis://redis:6379"
+  JWT_EXPIRES_IN: "7d"
+  BACKEND_URL: "http://backend:5000"
+  POLL_INTERVAL: "1"
+  HEALTH_PORT: "8080"
+  NODE_ENV: "production"

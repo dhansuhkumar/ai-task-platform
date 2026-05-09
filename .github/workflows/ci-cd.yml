@@ -1,0 +1,124 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, staging]
+  pull_request:
+    branches: [main]
+  release:
+    types: [published]
+
+env:
+  DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+  INFRA_REPO: yourgithub/ai-task-platform-infra
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+        working-directory: ./backend
+      - run: npm run lint
+        working-directory: ./backend
+      - run: npm ci
+        working-directory: ./frontend
+      - run: npm run lint
+        working-directory: ./frontend
+
+  test:
+    needs: lint
+    runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+        working-directory: ./backend
+      - run: npm test
+        working-directory: ./backend
+        env:
+          MONGODB_URI: mongodb://localhost:27017/ai-task-platform-test
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r worker/requirements.txt
+      - run: pytest worker/tests/
+        working-directory: ./
+
+  build-and-push:
+    needs: test
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging' || github.event_name == 'release'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [backend, frontend, worker]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Set image tags
+        id: tags
+        run: |
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            echo "tags=${{ secrets.DOCKER_USERNAME }}/ai-task-platform-${{ matrix.service }}:${{ github.event.release.tag_name }},${{ secrets.DOCKER_USERNAME }}/ai-task-platform-${{ matrix.service }}:latest" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then
+            echo "tags=${{ secrets.DOCKER_USERNAME }}/ai-task-platform-${{ matrix.service }}:staging,${{ secrets.DOCKER_USERNAME }}/ai-task-platform-${{ matrix.service }}:${{ github.sha }}" >> $GITHUB_OUTPUT
+          else
+            echo "tags=${{ secrets.DOCKER_USERNAME }}/ai-task-platform-${{ matrix.service }}:${{ github.sha }}" >> $GITHUB_OUTPUT
+          fi
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ./${{ matrix.service }}
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+
+  update-infra:
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.INFRA_REPO }}
+          token: ${{ secrets.GH_PAT }}
+      - name: Determine environment
+        id: env
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then
+            echo "namespace=ai-task-platform-staging" >> $GITHUB_OUTPUT
+            echo "tag=staging" >> $GITHUB_OUTPUT
+          else
+            echo "namespace=ai-task-platform" >> $GITHUB_OUTPUT
+            echo "tag=${{ github.sha }}" >> $GITHUB_OUTPUT
+          fi
+      - name: Update image tags in K8s manifests
+        run: |
+          sed -i "s|namespace:.*|namespace: ${{ steps.env.outputs.namespace }}|g" k3s/namespace.yaml
+          sed -i "s|image: .*/ai-task-platform-backend:.*|image: ${{ secrets.DOCKER_USERNAME }}/ai-task-platform-backend:${{ steps.env.outputs.tag }}|g" k3s/backend.yaml
+          sed -i "s|image: .*/ai-task-platform-frontend:.*|image: ${{ secrets.DOCKER_USERNAME }}/ai-task-platform-frontend:${{ steps.env.outputs.tag }}|g" k3s/frontend.yaml
+          sed -i "s|image: .*/ai-task-platform-worker:.*|image: ${{ secrets.DOCKER_USERNAME }}/ai-task-platform-worker:${{ steps.env.outputs.tag }}|g" k3s/worker.yaml
+      - name: Commit and push
+        run: |
+          git config user.name "CI Bot"
+          git config user.email "ci-bot@example.com"
+          git add .
+          git commit -m "Update ${{ steps.env.outputs.namespace }} images to ${{ steps.env.outputs.tag }}"
+          git push
