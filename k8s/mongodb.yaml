@@ -33,17 +33,17 @@ spec:
                 - mongosh
                 - --eval
                 - "db.adminCommand('ping')"
-            initialDelaySeconds: 30
-            periodSeconds: 10
-            timeoutSeconds: 10
+            initialDelaySeconds: 45
+            periodSeconds: 15
+            timeoutSeconds: 5
           readinessProbe:
             exec:
               command:
                 - mongosh
                 - --eval
                 - "db.adminCommand('ping')"
-            initialDelaySeconds: 5
-            periodSeconds: 5
+            initialDelaySeconds: 15
+            periodSeconds: 10
             timeoutSeconds: 5
           volumeMounts:
             - name: mongo-data
