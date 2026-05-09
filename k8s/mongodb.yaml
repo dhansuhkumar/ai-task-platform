@@ -35,6 +35,7 @@ spec:
                 - "db.adminCommand('ping')"
             initialDelaySeconds: 30
             periodSeconds: 10
+            timeoutSeconds: 10
           readinessProbe:
             exec:
               command:
@@ -43,6 +44,7 @@ spec:
                 - "db.adminCommand('ping')"
             initialDelaySeconds: 5
             periodSeconds: 5
+            timeoutSeconds: 5
           volumeMounts:
             - name: mongo-data
               mountPath: /data/db

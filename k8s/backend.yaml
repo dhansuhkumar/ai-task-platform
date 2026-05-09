@@ -16,7 +16,8 @@ spec:
     spec:
       containers:
         - name: backend
-          image: yourdockerhub/ai-task-platform-backend:latest
+          image: ai-task-platform-backend:latest
+          imagePullPolicy: Never
           ports:
             - containerPort: 5000
           envFrom:
