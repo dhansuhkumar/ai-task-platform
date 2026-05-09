@@ -127,6 +127,47 @@ The GitHub Actions workflow (`.github/workflows/ci-cd.yml`):
 - `DOCKER_PASSWORD` — Docker Hub password/token
 - `GH_PAT` — GitHub Personal Access Token with repo scope
 
+## Live Deployment
+
+The application is deployed on a local k3s cluster managed via Argo CD.
+
+### Access the App
+
+```bash
+# Port-forward to localhost:3000
+kubectl port-forward -n ai-task-platform svc/frontend 3000:8080
+
+# Open in browser
+open http://localhost:3000
+```
+
+### Demo Credentials
+
+After running the seed script:
+```bash
+docker compose exec backend node src/seed.js
+# or
+kubectl exec -n ai-task-platform deploy/backend -- node src/seed.js
+```
+
+```
+Email:    demo@example.com
+Password: demo123
+```
+
+### Repositories
+
+| Repo | URL |
+|------|-----|
+| Application | https://github.com/dhansuhkumar/ai-task-platform |
+| Infrastructure | https://github.com/dhansuhkumar/ai-task-platform-infra |
+
+### Argo CD Dashboard
+
+The Argo CD dashboard (`docs/argocd-dashboard.html`) shows the GitOps sync status. All 14 resources are synced with 6/6 pods running.
+
+![Argo CD Dashboard](docs/argocd-dashboard.png)
+
 ## API Endpoints
 
 ### Auth
